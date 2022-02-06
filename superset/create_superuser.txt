@@ -1,0 +1,12 @@
+sudo yum install -y postgis24_10 postgis24_10-client
+
+sudo -u postgres createuser -s -i -d -r -l -w sener
+sudo -u postgres psql -c "ALTER ROLE sener WITH PASSWORD 'sener';"
+sudo -u postgres psql -c "ALTER USER sener WITH SUPERUSER;"
+psql -h localhost -p 5432 -U sener -d traindb -W
+
+------------------------
+
+psql -h localhost -p 5432 -U sener -d traindb -W
+
+# create extension postgis;
