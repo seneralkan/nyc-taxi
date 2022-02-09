@@ -75,7 +75,7 @@ lines = (spark
 .readStream
 .format("kafka")
 .option("kafka.bootstrap.servers", "localhost:9092")
-.option("subscribe", "taxi")
+.option("subscribe", "test1")
 .load())
 
 
@@ -83,23 +83,15 @@ lines = (spark
 lines2 = lines.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)",
                           "topic", "partition", "offset", "timestamp")
 
-lines3 = lines2.withColumn("id", F.trim(F.split(F.col("value"), ",")[0])) \
+lines3 = lines2.withColumn("value2", F.split(F.col("value"), ",")) \
+                .withColumn("id", F.trim(F.split(F.col("value"), ",")[0])) \
                 .withColumn("vendor_id", F.split(F.col("value"), ",")[1]) \
                 .withColumn("pickup_datetime", F.split(F.col("value"), ",")[2]) \
-                .withColumn("dropoff_datetime", F.split(F.col("value"), ",")[3]) \
-                .withColumn("passenger_count", F.split(F.col("value"), ",")[4]) \
-                .withColumn("pickup_longitude", F.split(F.col("value"), ",")[5]) \
-                .withColumn("pickup_latitude", F.split(F.col("value"), ",")[6]) \
-                .withColumn("dropoff_longitude", F.split(F.col("value"), ",")[7]) \
-                .withColumn("dropoff_latitude", F.split(F.col("value"), ",")[8]) \
-                .withColumn("store_and_fwd_flag", F.split(F.col("value"), ",")[9]) \
-                .withColumn("trip_duration", F.split(F.col("value"), ",")[10]) \
+                .drop("value")
 
 #Transformation
 lines4 = lines3.withColumn("pickup_datetime", 
                     F.to_timestamp(F.col("pickup_datetime"),"yyyy-MM-dd HH:mm:ss")) \
-            .withColumn("dropoff_datetime",
-                    F.to_timestamp(F.col("dropoff_datetime"),"yyyy-MM-dd HH:mm:ss")) \
             .withColumn("pickup_year",
                     F.year(F.to_date(F.col("pickup_datetime")))) \
             .withColumn("pickup_month",
@@ -107,51 +99,21 @@ lines4 = lines3.withColumn("pickup_datetime",
             .withColumn("pickup_dayofweek",
                     F.dayofweek(F.to_date(F.col("pickup_datetime")))) \
             .withColumn("pickup_hour",
-                    F.hour(F.col("pickup_datetime"))) \
-            .withColumn("dropoff_year",
-                    F.year(F.to_date(F.col("dropoff_datetime")))) \
-            .withColumn("dropoff_month",
-                    F.month(F.to_date(F.col("dropoff_datetime")))) \
-            .withColumn("dropoff_dayofweek",
-                    F.dayofweek(F.to_date(F.col("dropoff_datetime")))) \
-            .withColumn("dropoff_hour",
-                    F.hour(F.col("dropoff_datetime"))) \
-            .withColumn("pickupDayofWeek_TR", 
-                    switch_day_func(F.col("pickup_dayofweek"))) \
-            .withColumn("dropoffDayofWeek_TR", 
-                    switch_day_func(F.col("dropoff_dayofweek"))) \
-            .withColumn("dropoffMonth_TR",
-                    switch_month(F.col("dropoff_month"))) \
-            .withColumn("pickupMonth_TR",
-                    switch_month(F.col("pickup_month"))) \
-            .withColumn("haversine_distance(km)", 
-                    haversine_distance(F.col("pickup_longitude"), F.col("pickup_latitude"), F.col("dropoff_longitude"), F.col("dropoff_latitude")))
+                    F.hour(F.col("pickup_datetime")))
 
 
-# Postgresql connection string
-jdbcUrl = "jdbc:postgresql://localhost/traindb?user=train&password=Ankara06"
+lines5 = lines4.withColumn("value", F.concat(F.col("pickup_datetime"), F.lit(","), F.col("pickup_year"), \
+        F.col("pickup_month"), F.lit(","), F.col("pickup_dayofweek"), \
+        F.col("pickup_hour"))) \
+        .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
-
-def write_to_multiple_sinks(df, batchId):
-    df.show()
-
-    # write postgresql
-    df.write.jdbc(url=jdbcUrl,
-                  table="iris_stream",
-                  mode="append",
-                  properties={"driver": 'org.postgresql.Driver'})
-
-    # write to file
-    df.write \
-        .format("parquet") \
-        .mode("append") \
-        .save("file:///home/train/iris_stream_parquet")
-
-# start streaming
-streamingQuery = (lines4
-                  .writeStream
-                  .foreachBatch(write_to_multiple_sinks)
-                  .option("checkpointLocation", checkpointDir)
-                  .start())
+streamingQuery = (lines5
+.writeStream
+.format("kafka")
+.option("kafka.bootstrap.servers", "localhost:9092")
+.option("topic", "test2")
+.outputMode("append")
+.option("checkpointLocation", checkpoint_dir)
+.start())
 
 streamingQuery.awaitTermination()
