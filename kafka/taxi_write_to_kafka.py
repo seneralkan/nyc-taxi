@@ -70,7 +70,6 @@ spark.udf.register("switch_month", switch_month)
 switch_day_func = F.udf(lambda z: switch_tr_day(z), StringType())
 spark.udf.register("switch_day_func", switch_day_func)
 
-
 lines = (spark
 .readStream
 .format("kafka")
@@ -89,7 +88,7 @@ lines3 = lines2.withColumn("value2", F.split(F.col("value"), ",")) \
                 .withColumn("pickup_datetime", F.split(F.col("value"), ",")[2]) \
                 .drop("value")
 
-#Transformation
+# Transformation
 lines4 = lines3.withColumn("pickup_datetime", 
                     F.to_timestamp(F.col("pickup_datetime"),"yyyy-MM-dd HH:mm:ss")) \
             .withColumn("pickup_year",
@@ -101,7 +100,7 @@ lines4 = lines3.withColumn("pickup_datetime",
             .withColumn("pickup_hour",
                     F.hour(F.col("pickup_datetime")))
 
-
+# Serialization
 lines5 = lines4.withColumn("value", F.concat(F.col("pickup_datetime"), F.lit(","), F.col("pickup_year"), \
         F.col("pickup_month"), F.lit(","), F.col("pickup_dayofweek"), \
         F.col("pickup_hour"))) \

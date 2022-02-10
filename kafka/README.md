@@ -39,9 +39,7 @@ kafka-topics.sh --bootstrap-server localhost:9092 \
 ### Generate Dataset
 `python dataframe_to_kafka.py -i ~/datasets/nyc_taxi.csv -t taxi`
 
-`python dataframe_to_kafka.py -i ~/datasets/iris.csv -t test1 -k 4`
-
 ### Kafka Consumer
 `kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test1 --group taxi_group`
 
-`kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test2 --group iris_group`
+`kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test2 --group taxi_group`
