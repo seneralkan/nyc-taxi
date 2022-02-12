@@ -30,7 +30,7 @@ kafka-topics.sh --bootstrap-server localhost:9092 \
 
 `kafka-console-producer.sh \
 --bootstrap-server localhost:9092 \
---topic taxi`
+--topic test1`
 
 ### Activate Datagen
 
