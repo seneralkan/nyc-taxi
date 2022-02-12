@@ -5,16 +5,15 @@ from elasticsearch import Elasticsearch, helpers
 from pyspark.sql import SparkSession, functions as F
 import time
 from helpers import switch_month_day, switch_tr_day, haversine
+from pyspark.sql.types import StringType, FloatType, IntegerType, DateType, TimestampType
+from math import radians, cos, sin, asin, sqrt
 
 spark = (SparkSession.builder
 .appName("Read From Kafka")
-.master("local[2]")
-.config("spark.driver.memory","2048m")
-.config("spark.sql.shuffle.partitions", 4)
-.config("spark.jars.packages","org.apache.spark:spark-sql-kafka-0-10_2.12:3.1.1")
-.config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-.config("spark.jars.packages", "org.elasticsearch:elasticsearch-spark-30_2.12:7.12.1") 
+.config("spark.jars.packages", "org.elasticsearch:elasticsearch-spark-30_2.12:7.12.1," "org.apache.spark:spark-sql-kafka-0-10_2.12:3.1.1")
 .getOrCreate())
+
+spark.sparkContext.setLogLevel('ERROR')
 
 spark.sparkContext.setLogLevel('ERROR')
 
@@ -37,11 +36,11 @@ lines = (spark
 .option("subscribe", "test1")
 .load())
 
-# # deserialize key and value
+# Deserialize key and value
 lines2 = lines.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)",
                           "topic", "partition", "offset", "timestamp")
 
-
+# Split value and assig to the column
 lines3 = lines2.withColumn("value2", F.split(F.col("value"), ",")) \
                 .withColumn("id", F.trim(F.split(F.col("value"), ",")[0])) \
                 .withColumn("vendor_id", F.split(F.col("value"), ",")[1]) \
@@ -55,21 +54,67 @@ lines3 = lines2.withColumn("value2", F.split(F.col("value"), ",")) \
                 .withColumn("store_and_fwd_flag", F.split(F.col("value"), ",")[9]) \
                 .withColumn("trip_duration", F.split(F.col("value"), ",")[10]) \
 
-# Transformation
-lines4 = lines3.withColumn("pickup_datetime",
+# Drop unnecessary Kafka key, value, topic, partition, offset and timestamp colum
+lines4 = lines3.drop("key", "value", "value2", "topic", "partition", "offset", "timestamp")
+
+# # Transformation
+# lines5 = lines4.withColumn("pickup_datetime",
+#                         F.to_timestamp(F.col("pickup_datetime"), "yyyy-MM-dd HH:mm:ss")) \
+#             .withColumn("dropoff_datetime",
+#                         F.to_timestamp(F.col("dropoff_datetime"), "yyyy-MM-dd HH:mm:ss"))
+
+# lines6 = lines5.withColumn("pickup_year",
+#                         F.year(F.to_date(F.col("pickup_datetime")))) \
+#             .withColumn("pickup_month",
+#                         F.month(F.to_date(F.col("pickup_datetime")))) \
+#             .withColumn("pickup_dayofweek",
+#                         F.dayofweek(F.to_date(F.col("pickup_datetime")))) \
+#             .withColumn("pickup_hour",
+#                         F.hour(F.col("pickup_datetime")))
+
+# lines7=lines6.withColumn("pickupDayofWeek_TR",
+#                         switch_tr(F.col("pickup_dayofweek"))) \
+#             .withColumn("pickupMonth_TR",
+#                         switch_month(F.col("pickup_month"))) \
+#             .withColumn("haversine_distance(km)",
+#                         haversine_distance(F.col("pickup_longitude"), F.col("pickup_latitude"),
+#                                            F.col("dropoff_longitude"),
+#                                            F.col("dropoff_latitude"))) \
+#             .withColumn("travel_speed", 
+#                         1000 * F.col("haversine_distance(km)") / F.col("trip_duration")) \
+#             .drop("pickup_datetime", "dropoff_datetime")
+
+def write_to_elasticsearch(df, batchId):
+    # Cast columns
+    df2 = df.withColumn("id", F.col("id")) \
+                .withColumn("vendor_id", F.col("vendor_id").cast(IntegerType())) \
+                .withColumn("pickup_datetime", F.col("pickup_datetime")) \
+                .withColumn("dropoff_datetime", F.col("dropoff_datetime")) \
+                .withColumn("passenger_count", F.col("passenger_count").cast(IntegerType())) \
+                .withColumn("pickup_longitude", F.col("pickup_longitude").cast(FloatType)) \
+                .withColumn("pickup_latitude", F.col("pickup_latitude").cast(FloatType())) \
+                .withColumn("dropoff_longitude", F.col("dropoff_longitude").cast(FloatType())) \
+                .withColumn("dropoff_latitude", F.col("dropoff_latitude").cast(FloatType())) \
+                .withColumn("store_and_fwd_flag", F.col("store_and_fwd_flag").cast(IntegerType())) \
+                .withColumn("trip_duration", F.col("trip_duration").cast(IntegerType())) \
+
+    # Transformation 1
+    df3 = df2.withColumn("pickup_datetime",
                         F.to_timestamp(F.col("pickup_datetime"), "yyyy-MM-dd HH:mm:ss")) \
             .withColumn("dropoff_datetime",
                         F.to_timestamp(F.col("dropoff_datetime"), "yyyy-MM-dd HH:mm:ss"))
 
-lines5 = lines4.withColumn("pickup_year",
+    # Transformation 2
+    df4 = df3.withColumn("pickup_year",
                         F.year(F.to_date(F.col("pickup_datetime")))) \
             .withColumn("pickup_month",
                         F.month(F.to_date(F.col("pickup_datetime")))) \
             .withColumn("pickup_dayofweek",
                         F.dayofweek(F.to_date(F.col("pickup_datetime")))) \
             .withColumn("pickup_hour",
-                        F.hour(F.col("pickup_datetime"))) \
-            .withColumn("pickupDayofWeek_TR",
+                        F.hour(F.col("pickup_datetime")))
+    # Transformation 3
+    df5 = df4.withColumn("pickupDayofWeek_TR",
                         switch_tr(F.col("pickup_dayofweek"))) \
             .withColumn("pickupMonth_TR",
                         switch_month(F.col("pickup_month"))) \
@@ -80,38 +125,36 @@ lines5 = lines4.withColumn("pickup_year",
             .withColumn("travel_speed", 
                         1000 * F.col("haversine_distance(km)") / F.col("trip_duration")) \
             .drop("pickup_datetime", "dropoff_datetime")
+    
+    
+    df5.show(n=5, truncate=False)
 
-
-jdbcUrl = "jdbc:postgresql://localhost/traindb?user=train&password=Ankara06"
-
-def write_to_multiple_sinks(df, batchId):
-    df.persist()
-    df.show()
-
-    # write postgresql
-    df.write.jdbc(url=jdbcUrl,
-                  table="iris",
-                  mode="append",
-                  properties={"driver": 'org.postgresql.Driver'})
-
-    # write to elasticsearch
-    df.write \
+    # Write to Elasticsearch
+    df5.write \
     .format("org.elasticsearch.spark.sql") \
     .mode("append") \
     .option("es.nodes", "localhost") \
     .option("es.port","9200") \
-    .save("taxi")
-
-    df.unpersist()
+    .save("taxi_cast")
 
 checkpoint_dir = "file:///tmp/streaming/read_from_kafka"
 # start streaming
-streamingQuery = (lines5
-                  .writeStream
-                  .foreachBatch(write_to_multiple_sinks)
-                  .trigger(processingTime="1 second")
-                  .option("checkpointLocation", checkpointDir)
-                  .start())
+# streamingQuery = (lines4
+#                   .writeStream
+#                   .foreachBatch(write_to_elasticsearch)
+#                   .trigger(processingTime="10 second")
+#                   .option("checkpointLocation", checkpoint_dir)
+#                   .start())
+
+streamingQuery = (lines4
+.writeStream
+.format("console")
+.outputMode("append")
+.trigger(processingTime="20 second")
+.option("checkpointLocation", checkpoint_dir)
+.option("numRows",30)
+.option("truncate",True)
+.start())
 
 # start streaming
 streamingQuery.awaitTermination()
