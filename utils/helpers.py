@@ -4,26 +4,6 @@ from pyspark.sql import DataFrame
 
 class MyHelpers:
 
-    def get_spark_session(self, session_params: dict) -> SparkSession:
-        ## Put your code here.
-        spark = (SparkSession.builder
-                 .appName("Read From Kafka")
-                 .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.1.1")
-                 .getOrCreate())
-                #TODO: ELASTIC CONFIG EKLENECEK
-        spark.sparkContext.setLogLevel('ERROR')
-        return spark
-
-    def write_to_elastic(self, input_df: DataFrame): #TODO: GÜNCELLENCEK
-        # write to hive test1 database cars_cleaned table in avro format
-        input_df.write \
-            .format("avro") \
-            .mode("overwrite") \
-            .option("compression", "bzip2") \
-            .saveAsTable("default.cars_cleaned")
-
-        return print("Successfully uploaded to Hive")
-
     def switch_tr_day(day_index):
         my_dict = {
             1: 'Pazar',
@@ -71,35 +51,48 @@ class MyHelpers:
         r = 6371  # Radius of earth in kilometers. Use 3956 for miles. Determines return value units.
         return c * r
 
-    def format_dates_ML(self, input_df: DataFrame) -> DataFrame:
+    def get_spark_session(self, session_params: dict) -> SparkSession:
+        ## Put your code here.
+        spark = (SparkSession.builder
+                 .appName("Read From Kafka")
+                 .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.1.1")
+                 .getOrCreate())
+                #TODO: ELASTIC CONFIG EKLENECEK
+        spark.sparkContext.setLogLevel('ERROR')
+
+        haversine_distance = F.udf(lambda lon1, lat1, lon2, lat2: haversine(lon1, lat1, lon2, lat2), FloatType())
+        spark.udf.register("haversine_distance", haversine_distance)
+
+        switch_month = F.udf(lambda z: switch_month_day(z), StringType())
+        spark.udf.register("switch_month", switch_month)
+
+        switch_tr = F.udf(lambda z: switch_tr_day(z), StringType())
+        spark.udf.register("switch_tr", switch_tr)
+        
+        return spark
+
+
+    def write_to_elastic(self, input_df: DataFrame):
+        
+        input_df.write \
+                .format("org.elasticsearch.spark.sql") \
+                .mode("overwrite") \
+                .option("es.nodes", "localhost") \
+                .option("es.port","9200") \
+                .save("nyc_taxi")
+
+        return print("Successfully uploaded to ElasticSearch")
+
+    def format_dates(self, input_df: DataFrame) -> DataFrame:
         df = input_df.withColumn("pickup_datetime",
-                                   F.to_timestamp(F.col("pickup_datetime"), "yyyy-MM-dd HH🇲🇲ss")) \
+                                   F.to_timestamp(F.col("pickup_datetime"), "yyyy-MM-dd HH:mm:ss")) \
             .withColumn("dropoff_datetime",
-                        F.to_timestamp(F.col("dropoff_datetime"), "yyyy-MM-dd HH🇲🇲ss")) \
-            .withColumn("pickup_year",
-                        F.year(F.to_date(F.col("pickup_datetime")))) \
-            .withColumn("pickup_month",
-                        F.month(F.to_date(F.col("pickup_datetime")))) \
-            .withColumn("pickup_dayofweek",
-                        F.dayofweek(F.to_date(F.col("pickup_datetime")))) \
-            .withColumn("pickup_hour",
-                        F.hour(F.col("pickup_datetime"))) \
-            .withColumn("pickupDayofWeek_TR",
-                        MyHelpers.switch_tr_day(F.col("pickup_dayofweek"))) \
-            .withColumn("pickupMonth_TR",
-                        MyHelpers.switch_month_day(F.col("pickup_month"))) \
-            .withColumn("haversine_distance(km)",
-                        MyHelpers.haversine(F.col("pickup_longitude"), F.col("pickup_latitude"),
-                                           F.col("dropoff_longitude"),
-                                           F.col("dropoff_latitude")))
+                        F.to_timestamp(F.col("dropoff_datetime"), "yyyy-MM-dd HH:mm:ss"))
+
         return df
 
-    def format_dates_DE(self, input_df: DataFrame) -> DataFrame:
-        df = input_df.withColumn("pickup_datetime",
-                                   F.to_timestamp(F.col("pickup_datetime"), "yyyy-MM-dd HH🇲🇲ss")) \
-            .withColumn("dropoff_datetime",
-                        F.to_timestamp(F.col("dropoff_datetime"), "yyyy-MM-dd HH🇲🇲ss")) \
-            .withColumn("pickup_year",
+    def transform_dates(self, input_df: DataFrame) -> DataFrame:
+        df = input_df.withColumn("pickup_year",
                         F.year(F.to_date(F.col("pickup_datetime")))) \
             .withColumn("pickup_month",
                         F.month(F.to_date(F.col("pickup_datetime")))) \
@@ -110,12 +103,17 @@ class MyHelpers:
             .withColumn("pickupDayofWeek_TR",
                         MyHelpers.switch_tr_day(F.col("pickup_dayofweek"))) \
             .withColumn("pickupMonth_TR",
-                        MyHelpers.switch_month_day(F.col("pickup_month"))) \
-            .withColumn("haversine_distance(km)",
-                        MyHelpers.haversine(F.col("pickup_longitude"), F.col("pickup_latitude"),
-                                           F.col("dropoff_longitude"),
-                                           F.col("dropoff_latitude")))
+                        MyHelpers.switch_month_day(F.col("pickup_month")))
+        return df
 
-            #TODO: ELASTİC İÇİN FEATURELAR EKLE
+    def calculate_haversine(self, input_df: DataFrame) -> DataFrame:
+        df = input_df.withColumn("haversine_distance(km)",
+                    MyHelpers.haversine(F.col("pickup_longitude"), F.col("pickup_latitude"),
+                                       F.col("dropoff_longitude"),
+                                       F.col("dropoff_latitude")))
+        return df
 
+    def calculate_travel_speed(self, input_df: DataFrame) -> DataFrame:
+        df  = input_df.withColumn("travel_speed", 
+                    1000 * F.col("haversine_distance(km)") / F.col("trip_duration"))
         return df
