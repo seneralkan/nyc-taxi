@@ -6,6 +6,23 @@
 2. Start kafka server
 ` [train@localhost play]$ sudo systemctl start kafka`
 
+## Start Docker
+`sudo systemctl start docker`
+
+## Start Elastic Search
+
+Direct your file path to the docker-compose.yml path
+
+`docker-compose up -d`
+
+Wait the installing the docker images.
+
+Kibana:
+`http://localhost:5601`
+
+Elastic Search:
+`http://localhost:9200`
+
 # Data Generator and Kafka Producer Consumer
 
 ### List Kafka Topics
