@@ -23,6 +23,14 @@ Kibana:
 Elastic Search:
 `http://localhost:9200`
 
+1) Open Kibana UI
+2) Go to Dev Tools
+
+-- Get All Indexes Command
+
+-- `GET /_cat/indices?v`
+
+
 # Data Generator and Kafka Producer Consumer
 
 ### List Kafka Topics

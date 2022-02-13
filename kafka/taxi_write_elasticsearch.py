@@ -5,15 +5,13 @@ from elasticsearch import Elasticsearch, helpers
 from pyspark.sql import SparkSession, functions as F
 import time
 from helpers import switch_month_day, switch_tr_day, haversine
-from pyspark.sql.types import StringType, FloatType, IntegerType, DateType, TimestampType
+from pyspark.sql.types import StringType, FloatType, IntegerType, DateType, TimestampType, DoubleType
 from math import radians, cos, sin, asin, sqrt
 
 spark = (SparkSession.builder
 .appName("Read From Kafka")
 .config("spark.jars.packages", "org.elasticsearch:elasticsearch-spark-30_2.12:7.12.1," "org.apache.spark:spark-sql-kafka-0-10_2.12:3.1.1")
 .getOrCreate())
-
-spark.sparkContext.setLogLevel('ERROR')
 
 spark.sparkContext.setLogLevel('ERROR')
 
@@ -57,32 +55,20 @@ lines3 = lines2.withColumn("value2", F.split(F.col("value"), ",")) \
 # Drop unnecessary Kafka key, value, topic, partition, offset and timestamp colum
 lines4 = lines3.drop("key", "value", "value2", "topic", "partition", "offset", "timestamp")
 
-# # Transformation
-# lines5 = lines4.withColumn("pickup_datetime",
-#                         F.to_timestamp(F.col("pickup_datetime"), "yyyy-MM-dd HH:mm:ss")) \
-#             .withColumn("dropoff_datetime",
-#                         F.to_timestamp(F.col("dropoff_datetime"), "yyyy-MM-dd HH:mm:ss"))
+# Check the Schema
+lines4.printSchema()
 
-# lines6 = lines5.withColumn("pickup_year",
-#                         F.year(F.to_date(F.col("pickup_datetime")))) \
-#             .withColumn("pickup_month",
-#                         F.month(F.to_date(F.col("pickup_datetime")))) \
-#             .withColumn("pickup_dayofweek",
-#                         F.dayofweek(F.to_date(F.col("pickup_datetime")))) \
-#             .withColumn("pickup_hour",
-#                         F.hour(F.col("pickup_datetime")))
-
-# lines7=lines6.withColumn("pickupDayofWeek_TR",
-#                         switch_tr(F.col("pickup_dayofweek"))) \
-#             .withColumn("pickupMonth_TR",
-#                         switch_month(F.col("pickup_month"))) \
-#             .withColumn("haversine_distance(km)",
-#                         haversine_distance(F.col("pickup_longitude"), F.col("pickup_latitude"),
-#                                            F.col("dropoff_longitude"),
-#                                            F.col("dropoff_latitude"))) \
-#             .withColumn("travel_speed", 
-#                         1000 * F.col("haversine_distance(km)") / F.col("trip_duration")) \
-#             .drop("pickup_datetime", "dropoff_datetime")
+#  |-- id: string (nullable = true)
+#  |-- vendor_id: string (nullable = true)
+#  |-- pickup_datetime: string (nullable = true)
+#  |-- dropoff_datetime: string (nullable = true)
+#  |-- passenger_count: string (nullable = true)
+#  |-- pickup_longitude: string (nullable = true)
+#  |-- pickup_latitude: string (nullable = true)
+#  |-- dropoff_longitude: string (nullable = true)
+#  |-- dropoff_latitude: string (nullable = true)
+#  |-- store_and_fwd_flag: string (nullable = true)
+#  |-- trip_duration: string (nullable = true)
 
 def write_to_elasticsearch(df, batchId):
     # Cast columns
@@ -91,11 +77,11 @@ def write_to_elasticsearch(df, batchId):
                 .withColumn("pickup_datetime", F.col("pickup_datetime")) \
                 .withColumn("dropoff_datetime", F.col("dropoff_datetime")) \
                 .withColumn("passenger_count", F.col("passenger_count").cast(IntegerType())) \
-                .withColumn("pickup_longitude", F.col("pickup_longitude").cast(FloatType)) \
-                .withColumn("pickup_latitude", F.col("pickup_latitude").cast(FloatType())) \
-                .withColumn("dropoff_longitude", F.col("dropoff_longitude").cast(FloatType())) \
-                .withColumn("dropoff_latitude", F.col("dropoff_latitude").cast(FloatType())) \
-                .withColumn("store_and_fwd_flag", F.col("store_and_fwd_flag").cast(IntegerType())) \
+                .withColumn("pickup_longitude", F.col("pickup_longitude").cast(DoubleType())) \
+                .withColumn("pickup_latitude", F.col("pickup_latitude").cast(DoubleType())) \
+                .withColumn("dropoff_longitude", F.col("dropoff_longitude").cast(DoubleType())) \
+                .withColumn("dropoff_latitude", F.col("dropoff_latitude").cast(DoubleType())) \
+                .withColumn("store_and_fwd_flag", F.col("store_and_fwd_flag")) \
                 .withColumn("trip_duration", F.col("trip_duration").cast(IntegerType())) \
 
     # Transformation 1
@@ -132,29 +118,29 @@ def write_to_elasticsearch(df, batchId):
     # Write to Elasticsearch
     df5.write \
     .format("org.elasticsearch.spark.sql") \
-    .mode("append") \
+    .mode("overwrite") \
     .option("es.nodes", "localhost") \
     .option("es.port","9200") \
-    .save("taxi_cast")
+    .save("nyc_taxi_cast")
 
 checkpoint_dir = "file:///tmp/streaming/read_from_kafka"
 # start streaming
-# streamingQuery = (lines4
-#                   .writeStream
-#                   .foreachBatch(write_to_elasticsearch)
-#                   .trigger(processingTime="10 second")
-#                   .option("checkpointLocation", checkpoint_dir)
-#                   .start())
-
 streamingQuery = (lines4
-.writeStream
-.format("console")
-.outputMode("append")
-.trigger(processingTime="20 second")
-.option("checkpointLocation", checkpoint_dir)
-.option("numRows",30)
-.option("truncate",True)
-.start())
+                  .writeStream
+                  .foreachBatch(write_to_elasticsearch)
+                  .trigger(processingTime="10 second")
+                  .option("checkpointLocation", checkpoint_dir)
+                  .start())
+
+# streamingQuery = (lines4
+# .writeStream
+# .format("console")
+# .outputMode("append")
+# .trigger(processingTime="20 second")
+# .option("checkpointLocation", checkpoint_dir)
+# .option("numRows",30)
+# .option("truncate",True)
+# .start())
 
 # start streaming
 streamingQuery.awaitTermination()

@@ -97,7 +97,7 @@ def predict(df, batchId):
         .option("topic", "taxi-trip-dur-gt700") \
         .save()
 
-    transformed_df.filter("prediction =< 700").withColumn("value", F.concat_ws(",", *cols)) \
+    transformed_df.filter("prediction < 700").withColumn("value", F.concat_ws(",", *cols)) \
         .write.format("kafka") \
         .option("kafka.bootstrap.servers", "localhost:9092") \
         .option("topic", "taxi-trip-dur-lt700") \
