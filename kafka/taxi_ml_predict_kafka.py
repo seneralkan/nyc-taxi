@@ -51,17 +51,17 @@ lines3 = lines2.withColumn("value2", F.split(F.col("value"), ",")) \
                 .drop("value")
 
 # Cast Columns
-lines4 = lines3.withColumn("id", F.col("id"), F.col("id").cast(StringType())) \
+lines4 = lines3.withColumn("id", F.col("id").cast(StringType())) \
                 .withColumn("vendor_id", F.col("vendor_id").cast(IntegerType())) \
                 .withColumn("pickup_datetime", F.col("pickup_datetime").cast(StringType())) \
                 .withColumn("passenger_count", F.col("passenger_count").cast(IntegerType())) \
-                .withColumn("pickup_longitude", F.col("pickup_longitude").cast(FloatType)) \
+                .withColumn("pickup_longitude", F.col("pickup_longitude").cast(FloatType())) \
                 .withColumn("pickup_latitude", F.col("pickup_latitude").cast(FloatType())) \
                 .withColumn("dropoff_longitude", F.col("dropoff_longitude").cast(FloatType())) \
                 .withColumn("dropoff_latitude", F.col("dropoff_latitude").cast(FloatType()))
 
 # Transformation Test Dataset for Predicting the Model
-lines4 = lines3.withColumn("pickup_datetime", 
+lines5 = lines4.withColumn("pickup_datetime", 
                     F.to_timestamp(F.col("pickup_datetime"),"yyyy-MM-dd HH:mm:ss")) \
             .withColumn("pickup_month",
                     F.month(F.to_date(F.col("pickup_datetime")))) \
@@ -70,9 +70,10 @@ lines4 = lines3.withColumn("pickup_datetime",
             .withColumn("pickup_hour",
                     F.hour(F.col("pickup_datetime")))
 
-lines5= lines4.withColumn("haversine_distance_km", haversine_distance(F.col("pickup_longitude"), F.col("pickup_latitude"), F.col("dropoff_longitude"), F.col("dropoff_latitude"))) \
-.drop("pickup_datetime", "pickup_longitude", "pickup_latitude", "dropoff_longitude", "dropoff_latitude", "id")
+lines6= lines5.withColumn("haversine_distance_km", haversine_distance(F.col("pickup_longitude"), F.col("pickup_latitude"), F.col("dropoff_longitude"), F.col("dropoff_latitude"))) \
+.drop("pickup_datetime", "pickup_longitude", "pickup_latitude", "dropoff_longitude", "dropoff_latitude", "id", "key", "value", "value2", "topic", "partition", "offset", "timestamp")
 
+lines6.printSchema()
 
 # Laod Pipeline Model
 loaded_pipeline_model = PipelineModel.load("file:///home/train/project/nyc_taxi_model")
@@ -105,7 +106,7 @@ def predict(df, batchId):
 
 checkpoint_dir = "file:///tmp/streaming/write_to_kafka"
 
-streamingQuery = (lines5
+streamingQuery = (lines6
 .writeStream
 .foreachBatch(predict)
 .option("checkpointLocation", checkpoint_dir)

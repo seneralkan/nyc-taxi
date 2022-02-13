@@ -5,7 +5,7 @@ from elasticsearch import Elasticsearch, helpers
 from pyspark.sql import SparkSession, functions as F
 import time
 from helpers import switch_month_day, switch_tr_day, haversine
-from pyspark.sql.types import StringType, FloatType, IntegerType, DateType, TimestampType, DoubleType
+from pyspark.sql.types import StringType, FloatType, IntegerType, DateType, TimestampType, DoubleType, ArrayType
 from math import radians, cos, sin, asin, sqrt
 
 spark = (SparkSession.builder
@@ -112,18 +112,29 @@ def write_to_elasticsearch(df, batchId):
                         1000 * F.col("haversine_distance(km)") / F.col("trip_duration")) \
             .drop("pickup_datetime", "dropoff_datetime")
     
+    # Transformation 4 ( Defining lat and lon as an array in order to see as geometric object in Elasticsearch )
+    pickup_geo_col = [F.col("pickup_latitude"), F.col("pickup_longitude")]
+    dropoff_geo_col = [F.col("dropoff_latitude"), F.col("dropoff_longitude")]
+
+    df6 = df5.withColumn("pickup_location", 
+                        F.array(pickup_geo_col)) \
+            .withColumn("dropoff_location",
+                        F.array(dropoff_geo_col)) \
+            .drop("pickup_latitude", "pickup_longitude", "dropoff_latitude", "dropoff_longitude")
     
-    df5.show(n=5, truncate=False)
+    df6.show(n=5, truncate=False)
 
     # Write to Elasticsearch
-    df5.write \
+    df6.write \
     .format("org.elasticsearch.spark.sql") \
     .mode("overwrite") \
     .option("es.nodes", "localhost") \
     .option("es.port","9200") \
-    .save("nyc_taxi_cast")
+    .save("my-index-000004")
 
 checkpoint_dir = "file:///tmp/streaming/read_from_kafka"
+
+####### Write to Elasticsearch #######
 # start streaming
 streamingQuery = (lines4
                   .writeStream
@@ -132,6 +143,7 @@ streamingQuery = (lines4
                   .option("checkpointLocation", checkpoint_dir)
                   .start())
 
+####### Write to Console #######
 # streamingQuery = (lines4
 # .writeStream
 # .format("console")
