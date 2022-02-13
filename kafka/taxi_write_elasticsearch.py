@@ -127,7 +127,7 @@ def write_to_elasticsearch(df, batchId):
     # Write to Elasticsearch
     df6.write \
     .format("org.elasticsearch.spark.sql") \
-    .mode("overwrite") \
+    .mode("append") \
     .option("es.nodes", "localhost") \
     .option("es.port","9200") \
     .save("my-index-000004")

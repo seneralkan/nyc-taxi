@@ -131,13 +131,17 @@ kafka-topics.sh --bootstrap-server localhost:9092 \
 `source datagen/bin/activate`
 
 ### Generate Dataset
+---- Data Engineering
 `python dataframe_to_kafka.py -i ~/datasets/nyc_taxi_subset.csv -t test1`
 
+---- ML Prediction
+`python dataframe_to_kafka.py -i ~/datasets/test.csv -t test1`
+
 ### Kafka Consumer
+---- Data Engineering
 `kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test1 --group taxi_group`
 
-`kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test2 --group taxi_group`
-
+---- ML Prediction
 `kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic taxi-trip-dur-gt700`
 
 `kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic taxi-trip-dur-lt700`
