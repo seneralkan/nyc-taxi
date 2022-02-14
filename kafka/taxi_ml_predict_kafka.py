@@ -55,10 +55,10 @@ lines4 = lines3.withColumn("id", F.col("id").cast(StringType())) \
                 .withColumn("vendor_id", F.col("vendor_id").cast(IntegerType())) \
                 .withColumn("pickup_datetime", F.col("pickup_datetime").cast(StringType())) \
                 .withColumn("passenger_count", F.col("passenger_count").cast(IntegerType())) \
-                .withColumn("pickup_longitude", F.col("pickup_longitude").cast(FloatType())) \
-                .withColumn("pickup_latitude", F.col("pickup_latitude").cast(FloatType())) \
-                .withColumn("dropoff_longitude", F.col("dropoff_longitude").cast(FloatType())) \
-                .withColumn("dropoff_latitude", F.col("dropoff_latitude").cast(FloatType()))
+                .withColumn("pickup_longitude", F.col("pickup_longitude").cast(DoubleType())) \
+                .withColumn("pickup_latitude", F.col("pickup_latitude").cast(DoubleType())) \
+                .withColumn("dropoff_longitude", F.col("dropoff_longitude").cast(DoubleType())) \
+                .withColumn("dropoff_latitude", F.col("dropoff_latitude").cast(DoubleType()))
 
 # Transformation Test Dataset for Predicting the Model
 lines5 = lines4.withColumn("pickup_datetime", 

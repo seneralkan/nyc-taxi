@@ -8,9 +8,14 @@ from helpers import switch_month_day, switch_tr_day, haversine
 from pyspark.sql.types import StringType, FloatType, IntegerType, DateType, TimestampType, DoubleType, ArrayType
 from math import radians, cos, sin, asin, sqrt
 
+# https://johnnn.tech/q/pyspark-2-x-programmatically-adding-maven-jar-coordinates-to-spark/
+spark_jars_packages = ','.join(['org.elasticsearch:elasticsearch-spark-30_2.12:7.12.1',
+                                'org.apache.spark:spark-sql-kafka-0-10_2.12:3.1.1',])
+
+# .config("spark.jars.packages", "org.elasticsearch:elasticsearch-spark-30_2.12:7.12.1," "org.apache.spark:spark-sql-kafka-0-10_2.12:3.1.1")
 spark = (SparkSession.builder
 .appName("Read From Kafka")
-.config("spark.jars.packages", "org.elasticsearch:elasticsearch-spark-30_2.12:7.12.1," "org.apache.spark:spark-sql-kafka-0-10_2.12:3.1.1")
+.config("spark.jars.packages", spark_jars_packages)
 .getOrCreate())
 
 spark.sparkContext.setLogLevel('ERROR')
@@ -110,11 +115,12 @@ def write_to_elasticsearch(df, batchId):
                                            F.col("dropoff_latitude"))) \
             .withColumn("travel_speed", 
                         1000 * F.col("haversine_distance(km)") / F.col("trip_duration")) \
-            .drop("pickup_datetime", "dropoff_datetime")
+            .withColumn("pickup_datetime", F.to_date(F.col("pickup_datetime"))) \
+            .withColumn("dropoff_datetime", F.to_date(F.col("dropoff_datetime")))
     
     # Transformation 4 ( Defining lat and lon as an array in order to see as geometric object in Elasticsearch )
-    pickup_geo_col = [F.col("pickup_latitude"), F.col("pickup_longitude")]
-    dropoff_geo_col = [F.col("dropoff_latitude"), F.col("dropoff_longitude")]
+    pickup_geo_col = [F.col("pickup_longitude"), F.col("pickup_latitude")]
+    dropoff_geo_col = [F.col("dropoff_longitude"), F.col("dropoff_latitude")]
 
     df6 = df5.withColumn("pickup_location", 
                         F.array(pickup_geo_col)) \
@@ -130,7 +136,7 @@ def write_to_elasticsearch(df, batchId):
     .mode("append") \
     .option("es.nodes", "localhost") \
     .option("es.port","9200") \
-    .save("my-index-000004")
+    .save("my-index-000008")
 
 checkpoint_dir = "file:///tmp/streaming/read_from_kafka"
 

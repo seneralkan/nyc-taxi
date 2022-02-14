@@ -33,7 +33,8 @@ Elastic Search:
 
 -- CREATE INDEX
 
-PUT my-index-000004
+
+  PUT my-index-000008
 {
   "mappings": {
     "properties": {
@@ -42,6 +43,12 @@ PUT my-index-000004
       },
       "dropoff_location": {
           "type": "geo_point"
+      },
+      "pickup_datetime":{
+          "type": "date"
+      },
+      "dropoff_datetime":{
+          "type": "date"
       },
       "passenger_count": {
           "type": "long"
