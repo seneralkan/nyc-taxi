@@ -5,7 +5,7 @@ from pyspark.sql.types import StringType, FloatType
 from math import radians, cos, sin, asin, sqrt
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml import Pipeline
-from pyspark.ml.regression import DecisionTreeRegressor, LinearRegression
+from pyspark.ml.regression import DecisionTreeRegressor, LinearRegression, RandomForestRegressor
 from pyspark.mllib.tree import DecisionTree, DecisionTreeModel
 from pyspark.mllib.util import MLUtils
 from pyspark.sql import SparkSession, SQLContext, Row
@@ -14,6 +14,8 @@ from pyspark.ml.feature import VectorAssembler, VectorIndexer
 from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.pipeline import PipelineModel
+from pyspark.ml.feature import StandardScaler
 
 def switch_tr_day(day_index):
     my_dict = {
@@ -115,6 +117,14 @@ assembler = VectorAssembler(inputCols=['vendor_id', 'passenger_count', 'pickup_m
 
 df5 = assembler.setHandleInvalid("skip").transform(df4).select("label", "features")
 
+# Standard Scaler
+scaler = StandardScaler(inputCol='assembled_features',
+    outputCol='features')
+
+scaler_model = scaler.fit(df5)
+df6 = scaler_model.transform(df5)
+
+
 # Preparation Test Dataset
 test1 = test.withColumn("pickup_datetime", F.to_timestamp(F.col("pickup_datetime"),"yyyy-MM-dd HH:mm:ss"))
 
@@ -133,36 +143,26 @@ testdf = test2.withColumn("id", F.regexp_replace(F.col("id"), "[id]", "")) \
 .drop("store_and_fwd_flag", "pickup_year", "pickup_datetime", "pickup_longitude", "pickup_latitude", "dropoff_longitude", "dropoff_latitude", "id")
 
 
-# Model
-dtr = DecisionTreeRegressor(featuresCol="features", labelCol="label", impurity="variance")
+ # Model
+dtr = RandomForestRegressor(featuresCol="features", labelCol="label", impurity="variance")
 
 # Choices of Tuning Parameters
-dtrparamGrid = (ParamGridBuilder().addGrid(dtr.maxDepth, [10]).build())
+dtrparamGrid = (ParamGridBuilder()
+    .addGrid(dtr.numTrees, [10,20,50])
+    .addGrid(dtr.seed, [42])
+    .addGrid(dtr.maxDepth, [5,10]).build())
 
-pipeline = Pipeline(stages = [assembler, dtr])
+# Pipeline
+from pyspark.ml.pipeline import Pipeline
 
-crossval = CrossValidator(estimator = pipeline, estimatorParamMaps = dtrparamGrid, evaluator = RegressionEvaluator(labelCol = "label", predictionCol = "prediction", metricName = "rmse"), numFolds = 10)
-model = crossval.fit(df4)
+pipeline_obj = Pipeline(stages=[assembler, scaler, dtr])
+pipeline_model = pipeline_obj.fit(df4)
 
-predictions = model.transform(testdf).cache()
-predictions.show(25)
+pipeline_model.write().overwrite().save("file:///home/train/project/nyc_taxi_model")
+loaded_pipeline_model = PipelineModel.load("file:///home/train/project/nyc_taxi_model")
 
-# Evaulation
-evaluator = RegressionEvaluator(labelCol="lable", predictionCol = "prediction", metricName = "rmse")
-rmse = evaluator.evaluate(predictions)
-print("Root Mean Squared Error (RMSE) on test data = %g" % rmse)
+pipeline_obj_nolabel = Pipeline(stages=[assembler, scaler])
 
-evaluator2 = RegressionEvaluator(labelCol="label", predictionCol = "prediction", metricName = "mae")
-mae = evaluator2.evaluate(predictions)
-print("Mean Absolute Error (MAE) on test data = %g" % mae)
+pipeline_obj_nolabel_model = pipeline_obj_nolabel.fit(df4)
 
-# Write Model
-model.write().overwrite().save("file:///home/train/project/nyc_taxi_model")
-
-# Load the model
-from pyspark.ml.tuning import TrainValidationSplitModel
-
-loaded_pipeline_model = TrainValidationSplitModel.load("file:///home/train/project/nyc_taxi_model")
-
-final_df = loaded_pipeline_model.transform(testdf)
-final_df= final_df.drop("assembled_features","features")
+pipeline_obj_nolabel_model.write().overwrite().save("file:///home/train/project/nyc_taxi_model_nolabel_model")
