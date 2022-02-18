@@ -30,7 +30,7 @@ Mainly, there are 2 sections as below;
 
 The main purpose of this section was maintaned ETL process for the streaming NYC Taxi dataset and create live dashboard using Kibana.
 
-![Streaming Pipeline](https://github.com/seneralkan/nyc-taxi/blob/master/Streaming%20Pipeline.png)
+![Streaming Pipeline](https://github.com/seneralkan/nyc-taxi/blob/master/img/Streaming%20Pipeline.png)
 
 ![Live Dashboard 1](https://github.com/seneralkan/nyc-taxi/blob/master/img/Live%20Dashboard-1.png)
 
@@ -40,4 +40,4 @@ The main purpose of this section was maintaned ETL process for the streaming NYC
 
 The main purpose of this section was predict Estimated Time Arrival(ETA) while streaming NYC Taxi dataset and direct to different Kafka topics based on ETA value.
 
-![ML Pipeline](https://github.com/seneralkan/nyc-taxi/blob/master/ML%20Pipeline.png)
+![ML Pipeline](https://github.com/seneralkan/nyc-taxi/blob/master/img/ML%20Pipeline.png)
